@@ -7,6 +7,8 @@ import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
 
 import android.content.Context;
+import android.util.Log;
+
 import com.facebook.react.modules.core.DeviceEventManagerModule;
 import com.facebook.react.bridge.Arguments;
 
@@ -17,73 +19,94 @@ import com.facebook.react.bridge.Callback;
 
 public class RNSimpleCompassModule extends ReactContextBaseJavaModule implements SensorEventListener {
 
-  private final ReactApplicationContext reactContext;
+    private final ReactApplicationContext reactContext;
 
-  private static Context mApplicationContext;
-  private int mAzimuth = 0; // degree
-  private int mFilter = 1;
-  private SensorManager mSensorManager;
-  private Sensor mSensor;
-  private float[] orientation = new float[3];
-  private float[] rMat = new float[9];
+    private static Context mApplicationContext;
+    private int mAzimuth = 0; // degree
+    private int mFilter = 1;
+    private SensorManager mSensorManager;
+    private Sensor mSensor;
+    private float[] orientation = new float[3];
+    private float[] rMat = new float[9];
+    private static final String TAG = "COMPASS";
 
-  public RNSimpleCompassModule(ReactApplicationContext reactContext) {
-    super(reactContext);
-    this.reactContext = reactContext;
-    mApplicationContext = reactContext.getApplicationContext();
-  }
-
-  @Override
-  public String getName() {
-    return "RNSimpleCompass";
-  }
-
-  @ReactMethod
-  public void start(int filter) {
-
-      if (mSensorManager == null) {
-          mSensorManager = (SensorManager) mApplicationContext.getSystemService(Context.SENSOR_SERVICE);
-      }
-
-      if (mSensor == null) {
-          mSensor = mSensorManager.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR);
-      }
-
-      mFilter = filter;
-      mSensorManager.registerListener(this, mSensor, SensorManager.SENSOR_DELAY_UI);
-  }
-
-  @ReactMethod
-  public void stop() {
-    if (mSensorManager != null) {
-      mSensorManager.unregisterListener(this);
+    public RNSimpleCompassModule(ReactApplicationContext reactContext) {
+        super(reactContext);
+        this.reactContext = reactContext;
+        mApplicationContext = reactContext.getApplicationContext();
     }
-  }
 
-  @Override
-  public void onSensorChanged(SensorEvent event) {
-      if( event.sensor.getType() == Sensor.TYPE_ROTATION_VECTOR ){
-          // calculate th rotation matrix
-          SensorManager.getRotationMatrixFromVector(rMat, event.values);
-          // get the azimuth value (orientation[0]) in degree
-          int newAzimuth = (int) ( Math.toDegrees( SensorManager.getOrientation( rMat, orientation )[0] ) + 360 ) % 360;
+    @Override
+    public String getName() {
+        return "RNSimpleCompass";
+    }
 
-          //dont react to changes smaller than the filter value
-          if (Math.abs(mAzimuth - newAzimuth) < mFilter) {
-              return;
-          }
+    @ReactMethod
+    public void start(int filter) {
 
-          mAzimuth = newAzimuth;
+        if (mSensorManager == null) {
+            mSensorManager = (SensorManager) mApplicationContext.getSystemService(Context.SENSOR_SERVICE);
+        }
 
-          getReactApplicationContext()
-                  .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class)
-                  .emit("HeadingUpdated", mAzimuth);
-      }
-  }
+        if (mSensor == null) {
+            mSensor = mSensorManager.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR);
+            if (mSensor==null)
+            {Log.d(TAG,"Sensore di rotazione non supportato");
+                mSensor = mSensorManager.getDefaultSensor(Sensor.TYPE_GEOMAGNETIC_ROTATION_VECTOR);
+                if (mSensor==null)
+                    Log.e(TAG, "Non è stato possibile trovare alcun sensore che supporti la bussola");
+                else {
+                    Log.d(TAG,"Sensore di geo-rotazione abilitato. Bussola OK!");
+                }
+            }
+            else
+            {
+                Log.d(TAG,"Sensore di rotazione abilitato. Bussola OK!");
+            }
+        }
+
+        mFilter = filter;
+        if (mSensor!=null)
+        {
+            Log.d(TAG,"Registro il Listener della bussola");
+            mSensorManager.registerListener(this, mSensor, SensorManager.SENSOR_DELAY_UI);
+        }
 
 
-  @Override
-  public void onAccuracyChanged(Sensor sensor, int accuracy) {
 
-  }
+    }
+
+    @ReactMethod
+    public void stop() {
+        if (mSensorManager != null) {
+            mSensorManager.unregisterListener(this);
+        }
+    }
+
+    @Override
+    public void onSensorChanged(SensorEvent event) {
+        if( event.sensor.getType() == Sensor.TYPE_ROTATION_VECTOR || event.sensor.getType() == Sensor.TYPE_GEOMAGNETIC_ROTATION_VECTOR  ){
+            // calculate th rotation matrix
+            SensorManager.getRotationMatrixFromVector(rMat, event.values);
+            // get the azimuth value (orientation[0]) in degree
+            int newAzimuth = (int) ( Math.toDegrees( SensorManager.getOrientation( rMat, orientation )[0] ) + 360 ) % 360;
+
+            //dont react to changes smaller than the filter value
+            if (Math.abs(mAzimuth - newAzimuth) < mFilter) {
+                return;
+            }
+
+            mAzimuth = newAzimuth;
+
+            getReactApplicationContext()
+                    .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class)
+                    .emit("HeadingUpdated", mAzimuth);
+        }
+    }
+
+
+    @Override
+    public void onAccuracyChanged(Sensor sensor, int accuracy) {
+
+    }
 }
